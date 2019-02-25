@@ -1,0 +1,157 @@
+---
+title: "Spatial Analysis"
+author: "Gage Clawson"
+date: "2/25/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(rgdal)
+library(sf)
+library(raster)
+library(tidyverse)
+
+```
+
+Shape files consist of four types:
+  - .dbf
+  - .prj 
+  - .shp 
+  - .shx
+
+
+Read in a shapefile
+```{r}
+ak_shp_sf <- read_sf("shapefiles/ak_regions.shp") # specify the folder and then the shp file.
+
+
+plot(ak_shp_sf[1]) #plots each column without the subset. With subset will only plot first column. 
+```
+
+
+Fix the problem by transforming the shape file to alaskan equal area projection
+
+```{r}
+#check crs
+st_crs(ak_shp_sf)
+```
+
+```{r}
+ak_shp_eq <- ak_shp_sf %>%
+  st_transform(crs = 3338)  #could do the proj 4 string or an epsg code
+st_crs(ak_shp_eq)
+
+plot(ak_shp_eq[2])
+```
+
+
+```{r}
+nrow(ak_shp_eq) #treats it as a dataframe. Wouldn't be able to do this without sf package
+
+#geometry is sticky. Will never lose geometry from each row.
+
+
+```
+
+sf and the tidyverse
+```{r}
+se <- ak_shp_eq %>%
+  filter(region == "Southeast")
+plot(se[1])
+```
+
+## Joins
+
+AK Population Information
+
+```{r}
+pop <- read_csv("shapefiles/alaska_population.csv")
+
+head(pop)
+
+```
+
+Turn data into a simple feature
+
+```{r}
+pop_sf <- st_as_sf(pop, coords = c("lng", "lat"), crs =4326, remove = F ) #since the data is in long/lat have to read in as 4326, then we convert to alaska format
+head(pop_sf)
+
+plot(ak_shp_eq[1]) 
+plot(pop_sf[1])
+```
+
+```{r}
+#pop_joined_sf <- st_join(pop_sf, ak_shp_eq, join = st_within) # get an error from this because different crs
+
+pop_sf_eq <- pop_sf %>%
+  st_transform(crs = 3338)
+
+
+pop_joined_sf <- st_join(pop_sf_eq, ak_shp_eq, join = st_within)
+
+head(pop_joined_sf)
+dim(pop_joined_sf)
+
+plot(pop_joined_sf["population"]) # didn't keep the outlines of the regions 
+```
+
+Calculate total population in each region from pop_joined_sf
+```{r}
+
+#can get rid of geometry column by using st_set_geometry or as.data.frame
+pop_region <- pop_joined_sf %>%
+  st_set_geometry(NULL) %>%
+  group_by(region_id) %>%
+  summarise(total_pop = sum(population)) %>%
+  ungroup()#do sum... not length
+
+head(pop_region)
+```
+
+Add population information back to ak_shp_eq
+```{r}
+ak_pop_sf <- ak_shp_eq %>%
+  left_join(pop_region) #probably could to full join or inner join 
+
+head(ak_pop_sf)
+
+plot(ak_pop_sf[4])
+```
+
+group by and summarise 
+
+Calculate population by AK Management area
+```{r}
+
+manage_pop <- ak_pop_sf %>%
+  group_by(mgmt_area) %>%
+  summarise(mgmt_pop = sum(total_pop), do_union = F) #do_union = F keeps the region boundaries 
+
+head(manage_pop)
+
+plot(manage_pop[2])
+```
+
+
+Save a spatial object using write_sf
+```{r}
+write_sf(ak_pop_sf, "shapefiles/ak_regions_population.shp")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
