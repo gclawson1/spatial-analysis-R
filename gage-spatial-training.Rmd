@@ -154,4 +154,3 @@ write_sf(ak_pop_sf, "shapefiles/ak_regions_population.shp")
 
 
 
-
